@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Main Auto-Debug-AI application
+  auto-debug-ai:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    container_name: auto-debug-ai
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PROMETHEUS_PORT=9090
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=json
+    volumes:
+      - ./workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker-in-Docker
+    ports:
+      - "8000:8000"  # API server
+      - "9090:9090"  # Prometheus metrics
+    depends_on:
+      - redis
+      - chromadb
+    networks:
+      - auto-debug-net
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # Redis for caching and message passing
+  redis:
+    image: redis:7-alpine
+    container_name: auto-debug-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - auto-debug-net
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+
+  # ChromaDB for vector memory
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: auto-debug-chromadb
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=true
+    volumes:
+      - chroma-data:/chroma/chroma
+    ports:
+      - "8001:8000"  # ChromaDB API
+    networks:
+      - auto-debug-net
+    restart: unless-stopped
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: auto-debug-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9091:9090"  # Prometheus UI
+    networks:
+      - auto-debug-net
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: auto-debug-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/auto-debug.json
+    ports:
+      - "3000:3000"  # Grafana UI
+    depends_on:
+      - prometheus
+    networks:
+      - auto-debug-net
+    restart: unless-stopped
+
+  # Sandbox builder (builds the sandbox image)
+  sandbox-builder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sandbox
+    image: auto-debug-sandbox:latest
+    container_name: auto-debug-sandbox-builder
+    command: ["echo", "Sandbox image built successfully"]
+
+networks:
+  auto-debug-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  chroma-data:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'auto-debug-ai'
+    static_configs:
+      - targets: ['auto-debug-ai:9090']
+        labels:
+          service: 'auto-debug-ai'
+          
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+        labels:
+          service: 'redis'

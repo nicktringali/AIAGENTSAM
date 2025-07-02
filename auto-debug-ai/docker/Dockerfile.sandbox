@@ -1,0 +1,87 @@
+# Dockerfile for secure code execution sandbox
+FROM python:3.11-slim
+
+# Install common development tools and languages
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    # Version control
+    git \
+    # Common tools
+    curl \
+    wget \
+    vim \
+    nano \
+    ripgrep \
+    # Python tools
+    python3-pip \
+    python3-venv \
+    # Node.js and npm
+    nodejs \
+    npm \
+    # Go
+    golang-go \
+    # Rust
+    rustc \
+    cargo \
+    # Testing tools
+    pytest \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Install common Python packages for testing
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    pytest-cov \
+    pytest-mock \
+    unittest-xml-reporting \
+    black \
+    pylint \
+    mypy \
+    flake8 \
+    requests \
+    httpx \
+    numpy \
+    pandas \
+    fastapi \
+    flask \
+    django
+
+# Install common Node packages globally
+RUN npm install -g \
+    jest \
+    mocha \
+    eslint \
+    typescript \
+    @types/node \
+    prettier
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Create non-root user for running code
+RUN useradd -m -u 1001 -s /bin/bash sandbox && \
+    chown -R sandbox:sandbox /workspace
+
+# Set resource limits via pam_limits
+RUN echo "sandbox soft nproc 100" >> /etc/security/limits.conf && \
+    echo "sandbox hard nproc 100" >> /etc/security/limits.conf && \
+    echo "sandbox soft nofile 1024" >> /etc/security/limits.conf && \
+    echo "sandbox hard nofile 1024" >> /etc/security/limits.conf
+
+# Switch to non-root user
+USER sandbox
+
+# Set safe environment variables
+ENV PYTHONPATH=/workspace
+ENV NODE_PATH=/workspace/node_modules
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Default to bash shell
+CMD ["/bin/bash"]
